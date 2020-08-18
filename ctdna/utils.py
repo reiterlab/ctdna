@@ -1,5 +1,5 @@
 #!/usr/bin/python
-"""Various helper methods for the cbmlb-package"""
+"""Various helper methods for the ctdna-package"""
 import logging
 import os
 import pathlib
@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pandas as pd
 
-import cbmlb.settings as settings
+import ctdna.settings as settings
 
 __date__ = 'February 24, 2020'
 __author__ = 'Johannes REITER'
@@ -24,8 +24,22 @@ class Output:
     detection_dir = None
     roc_dir = None
 
-    col_bm_amount = 'biomarker_total'
-    col_bm_sampled = 'biomarker_sampled'
+    # column names in output files
+    col_bm_amount = 'Biomarker_total'
+    col_bm_sampled = 'Biomarker_sampled'
+    col_time = 'Time'
+    col_lesion_size = 'LesionSize'
+
+    col_det_size = 'lb_det_size'
+    col_det_time = 'lb_det_time'
+    col_lead_t_img = 'lead_time_imaging'
+
+    col_lead_t_diag = 'lead_time_diagnosis'
+
+    col_symp_time = 'symptomatic_det_time'
+    col_diag_size = 'diag_size'
+
+    col_notes = 'Notes'
 
     def __init__(self, output_directory=settings.OUTPUT_DIR_NAME):
         """
@@ -96,9 +110,9 @@ def add_parser_parameter_args(parser):
     parser.add_argument('--b_bn', help='birth rate of benign cells', type=float, default=None)
     parser.add_argument('--d_bn', help='death rate of benign cells', type=float, default=None)
     parser.add_argument('--bn_lesion_size', help='benign lesion size', type=float, default=None)
-    parser.add_argument('--n_bn_lesions', help='number of benign lesions', type=int, default=1)
+    parser.add_argument('--n_bn_lesions', help='number of benign lesions', type=int, default=0)
 
-    parser.add_argument('--n_cancer_muts', help='number of mutations in cancer', type=int, default=None)
+    parser.add_argument('--n_muts', help='number of clonal and covered mutations in cancer', type=int, default=None)
     parser.add_argument('--n_bn_lesion_muts', help='number of mutations in benign lesions', type=int, default=None)
 
     parser.add_argument('-M', '--det_size',
@@ -108,13 +122,24 @@ def add_parser_parameter_args(parser):
                         help='simulation running time for tumors [days]',
                         type=float, default=None)
 
-    parser.add_argument('--min_det_muts', help='minimal number of called mutations such that the detection is positive',
+    parser.add_argument('--min_muts', help='minimal number of called mutations for cancer diagnosis',
                         type=int, default=1)
+    parser.add_argument('--min_vaf', help='minimal variant allele frequency for mutation detection',
+                        type=float, default=0.0)
+    parser.add_argument('--min_reads', help='minimal variant reads for mutation detection',
+                        type=int, default=1)
+
+    # either p-value threshold or annual FPR (false positive rate) needs to be given
+    parser.add_argument('--pval_th', help='maximal p-value of mutation to be called',
+                        type=float, default=None)
+    parser.add_argument('--annual_fpr', help='False positive rate (1 - specificity) when tests are repeated for a year',
+                        type=float, default=None)
+
     parser.add_argument('--tube_size', help='liquid biopsy sampling tube size in liters [default 0.015]',
                         type=float, default=settings.TUBE_SIZE)
 
-    parser.add_argument('--biomarker_wt_freq_ml', help='mean number of wildtype biomarkers per plasma ml',
-                        type=int, default=settings.NO_WT_BIOMARKERS_ML)
+    parser.add_argument('--biomarker_wt_freq_ml', help='fixed number of wildtype biomarkers per plasma ml',
+                        type=int, default=None)
 
     parser.add_argument('--exact_th', help='approximate growth of tumor after it reaches a threshold',
                         type=float, default=settings.EXACT_THRESHOLD)
@@ -129,9 +154,11 @@ def add_parser_parameter_args(parser):
 
 
 def get_filename_template(b=None, d=None, t12_cfdna_mins=None,
-                          q_d=None, q_b=None, lambda_1=None, det_size=None, nu=None, n_runs=None, t=None,
+                          q_d=None, q_b=None, lambda_1=None, det_size=None, n_runs=None, t=None,
+                          tx_start=None, b_treat=None, d_treat=None,
                           exact_th=None, min_det_muts=None, pval_th=None, fpr=None, min_supp_reads=None,
-                          min_det_vaf=None, mpc=None, mpp=None, pcs=None, ps=None, tube_size=None,
+                          min_det_vaf=None, mpc=None, mpp=None, pcs=None, d_bn=None,
+                          ps=None, tube_size=None,
                           seq_err=None, seq_eff=None, smp_frq=None, n_replications=None, suffix=None):
     """
     Produces template for naming of output files
@@ -142,13 +169,16 @@ def get_filename_template(b=None, d=None, t12_cfdna_mins=None,
     :param q_b: biomarker shedding probability per cell division (proliferation)
     :param lambda_1: biomarker shedding probability per unit of time (necrosis)
     :param det_size: simulated tumor end size
-    :param nu: biomarker shedding rate
+    :param tx_start: tumor size at the start of treatment if there is a treatment
+    :param b_treat: birth rate during treatment
+    :param d_treat: death during treatment
     :param n_runs: number of realizations/subjects
     :param pcs: number of precursor lesions
     :param t: simulated time in days
     :param exact_th: growth of lesion is approximated after it reached the threshold
     :param mpc: number of covered mutations per cancer
     :param mpp: number of covered mutations per precursor lesion
+    :param d_bn: death rate of cells in benign lesion
     :param ps: number of mutations covered by sequencing panel
     :param tube_size: liters of sampled blood (default 0.015 l, 15 mL)
     :param seq_err: sequencing error rate per base pair
@@ -172,13 +202,16 @@ def get_filename_template(b=None, d=None, t12_cfdna_mins=None,
             ('_qb={:.1e}'.format(q_b) if q_b is not None and q_b > 0 else '') +
             ('_l1={:.1e}'.format(lambda_1) if lambda_1 is not None and lambda_1 > 0 else '') +
             ('_M={:.1e}'.format(det_size) if det_size is not None else '') +
-            ('_nu={}'.format(nu) if nu is not None else '') +
-            ('_pcs={}'.format(pcs) if pcs is not None else '') +
+            ('_Tx={:.1e}'.format(tx_start) if tx_start is not None else '') +
+            ('_bt={}'.format(b_treat) if b_treat is not None and b != b_treat else '') +
+            (f'_dt={round(d_treat, 8)}' if d_treat is not None and d != d_treat else '') +
             ('_t={:.1e}'.format(t) if t is not None else '') +
             ('_eth={:.0e}'.format(exact_th) if exact_th is not None and exact_th != settings.EXACT_THRESHOLD else '') +
             ('_n={:.0e}'.format(n_runs) if n_runs is not None else '') +
             ('_mpc={}'.format(mpc) if mpc is not None else '') +
+            ('_pcs={}'.format(pcs) if pcs is not None and pcs > 0 else '') +
             ('_mpp={}'.format(mpp) if mpp is not None else '') +
+            ('_dbn={}'.format(d_bn) if d_bn is not None else '') +
             ('_ps={}'.format(ps) if ps is not None else '') +
             ('_ts={}'.format(tube_size) if tube_size is not None else '') +
             ('_sqer={:.1e}'.format(seq_err) if seq_err is not None else '') +
@@ -214,11 +247,14 @@ def get_tumor_dynamics_fps(parent_dyn_dir, b, d, t12, q_d, det_size, exact_th=se
     fn_pattern = get_filename_template(b=b, d=d, t12_cfdna_mins=t12,
                                        q_d=q_d, det_size=det_size, exact_th=exact_th)
     dyn_dir = os.path.join(parent_dyn_dir, f'dynamics{fn_pattern}')
-    for fn in sorted(os.listdir(dyn_dir)):
-        if fn_pattern in fn and fn.endswith('.csv'):
-            tumor_fps.append(os.path.join(dyn_dir, fn))
+    if os.path.isdir(dyn_dir):
+        for fn in sorted(os.listdir(dyn_dir)):
+            if fn_pattern in fn and fn.endswith('.csv'):
+                tumor_fps.append(os.path.join(dyn_dir, fn))
+        logger.info(f'Found {len(tumor_fps)} tumor dynamics files with matching pattern of {fn_pattern}.')
+    else:
+        logger.warning(f'Directory with previously simulated evolving tumors was not found: {os.path.abspath(dyn_dir)}')
 
-    logger.info(f'Found {len(tumor_fps)} tumor dynamics files with matching pattern of {fn_pattern}.')
     return tumor_fps
 
 
@@ -325,8 +361,8 @@ def calculate_shedding_probability(ge_per_ml_per_cm3, d, epsilon, n_cells_per_cm
     return qd
 
 
-def sphere_volume(d):
-    return 4.0/3 * (d/2)**3 * math.pi
+def sphere_volume(d_cm):
+    return 4.0 / 3 * (d_cm / 2) ** 3 * math.pi
 
 
 def diameter_cells(d_cm):
@@ -341,8 +377,22 @@ def longest_diameter_volume(d_cm):
     return 4.0/3 * (d_cm/2)**3 * math.pi
 
 
-def volume_diameter(v_cells):
+def cells_diameter(v_cells):
     """
     Takes volume in number of cells and returns diameter in cm
     """
     return (6 * v_cells/1e9 / math.pi) ** (1.0/3)
+
+
+def stats_string(array):
+    if np.count_nonzero(array) > 0:
+        stats_str = (f'mean {np.nanmean(array):.3e}, median {np.nanmedian(array):.3e}, '
+                     + f'25th perc {np.nanpercentile(array, 25):.3e}, 75th perc {np.nanpercentile(array, 75):.3e}, '
+                     + f'smallest {np.nanmin(array):.3e}, largest {np.nanmax(array):.3e}')
+
+        n_nan = np.count_nonzero(np.isnan(array))
+        if n_nan:
+            stats_str += f'; WARNING: {n_nan} NANs'
+        return stats_str
+    else:
+        return f'WARNING: All {len(array)} entries are NANs.'

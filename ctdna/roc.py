@@ -4,14 +4,13 @@
 import logging
 import os
 import numpy as np
-import argparse
 
-import cbmlb.settings as settings
-from cbmlb.utils import get_filename_template, Output, add_parser_parameter_args
-from cbmlb.utils import get_plasma_dna_concentrations, calculate_elimination_rate
-from cbmlb.sampling import perform_virtual_detection
-from cbmlb.detection import Detection
-from cbmlb.bp_formulas import get_random_bms_at_size
+import ctdna.settings as settings
+from ctdna.utils import get_filename_template, Output
+from ctdna.utils import get_plasma_dna_concentrations, calculate_elimination_rate
+from ctdna.sampling import simulate_virtual_detection
+from ctdna.detection import Detection
+from ctdna.bp_formulas import get_random_bms_at_size
 
 __date__ = 'October 21, 2018'
 __author__ = 'Johannes REITER'
@@ -92,11 +91,11 @@ def calculate_roc(n_samples, n_precursors, b, d, b_bn, d_bn, q_d, t12, bn_lesion
     # create random samples of plasma DNA concentrations per mL in humans
     plasma_dna_concs = get_plasma_dna_concentrations(n_samples, gamma_params=settings.FIT_GAMMA_PARAMS)
     # calculate whole genome equivalents per plasma ml
-    wGEs_per_ml = plasma_dna_concs / settings.DIPLOID_GE_WEIGHT_ng
+    hges_per_ml = plasma_dna_concs / (settings.DIPLOID_GE_WEIGHT_ng / 2)
 
     # ############# Compute false positives from benign lesions #############
     fprs = compute_false_positives(n_samples, n_precursors, b_bn, d_bn, q_d, t12, bn_lesion_size, muts_per_precursor,
-                                   wGEs_per_ml, tube_size, panel_size, seq_err, seq_eff,
+                                   hges_per_ml, tube_size, panel_size, seq_err, seq_eff,
                                    min_det_muts, min_det_vaf, min_supp_reads, pvals, pval_min_log, pval_max_log)
 
     logger.debug('Obtained false positive rates: ' + ', '.join('{:.4f}'.format(fpr) for fpr in fprs))
@@ -123,9 +122,9 @@ def calculate_roc(n_samples, n_precursors, b, d, b_bn, d_bn, q_d, t12, bn_lesion
             bm_tumors = get_random_bms_at_size(det_size, d * q_d, b-d, epsilon, size=n_samples)
 
             for pval in pvals:
-                tpr = calculate_sensitivity(
+                tpr = simulate_sensitivity(
                     bm_tumors, muts_per_cancer, min_det_muts, pval_th=pval, min_supp_reads=min_supp_reads,
-                    min_det_vaf=min_det_vaf, biomarker_wt_freq_ml=wGEs_per_ml, tube_size=tube_size,
+                    min_det_vaf=min_det_vaf, wt_hge_per_ml=hges_per_ml, tube_size=tube_size,
                     panel_size=panel_size, seq_err=seq_err, seq_eff=seq_eff)
                 tprs.append(tpr)
 
@@ -147,7 +146,7 @@ def calculate_roc(n_samples, n_precursors, b, d, b_bn, d_bn, q_d, t12, bn_lesion
 
 
 def compute_false_positives(n_samples, n_precursors, b_bn, d_bn, q_d, t12, bn_lesion_size, muts_per_precursor,
-                            biomarker_wt_freq_ml,  tube_size, panel_size, seq_err, seq_eff,
+                            wt_hge_per_ml, tube_size, panel_size, seq_err, seq_eff,
                             min_det_muts, min_det_vaf, min_supp_reads, pvals, pval_min_log, pval_max_log):
     """
     Calculate the false-positive rate for the given number of samples
@@ -159,7 +158,7 @@ def compute_false_positives(n_samples, n_precursors, b_bn, d_bn, q_d, t12, bn_le
     :param t12: half-life time of biomarker
     :param bn_lesion_size:
     :param muts_per_precursor:
-    :param biomarker_wt_freq_ml: array of wildtype biomarker amount per plasma mL for each sample
+    :param wt_hge_per_ml: array of wildtype biomarker amount (hGE) per plasma mL for each sample
     :param tube_size:
     :param panel_size:
     :param seq_err:
@@ -192,10 +191,10 @@ def compute_false_positives(n_samples, n_precursors, b_bn, d_bn, q_d, t12, bn_le
 
         fprs = [0.0]  # false positive rate
         for pval in pvals:
-            fpr = calculate_specificity(
+            fpr = simulate_specificity(
                 n_samples, n_precursors, muts_per_precursor, min_det_muts=min_det_muts,
                 pval_th=pval, min_supp_reads=min_supp_reads,
-                min_det_vaf=min_det_vaf, biomarker_wt_freq_ml=biomarker_wt_freq_ml, tube_size=tube_size,
+                min_det_vaf=min_det_vaf, wt_hge_per_ml=wt_hge_per_ml, tube_size=tube_size,
                 panel_size=panel_size, seq_err=seq_err, seq_eff=seq_eff,
                 bn_lesion_size=bn_lesion_size, b_bn=b_bn, d_bn=d_bn, q_d_bn=q_d, elimination_rate=epsilon)
             fprs.append(fpr)
@@ -207,9 +206,9 @@ def compute_false_positives(n_samples, n_precursors, b_bn, d_bn, q_d, t12, bn_le
     return fprs
 
 
-def calculate_specificity(n_samples, n_precursors, n_muts, min_det_muts, pval_th, min_supp_reads, min_det_vaf,
-                          biomarker_wt_freq_ml, tube_size, panel_size, seq_err, seq_eff,
-                          bn_lesion_size=None, b_bn=None, d_bn=None, q_d_bn=None, elimination_rate=None):
+def simulate_specificity(n_samples, n_precursors, n_muts, min_det_muts, pval_th, min_supp_reads, min_det_vaf,
+                         wt_hge_per_ml, tube_size, panel_size, seq_err, seq_eff,
+                         bn_lesion_size=None, b_bn=None, d_bn=None, q_d_bn=None, elimination_rate=None):
     """
     Calculate the specificity for the given number of samples
     :param n_samples: number of samples where the false positives are considered
@@ -219,7 +218,7 @@ def calculate_specificity(n_samples, n_precursors, n_muts, min_det_muts, pval_th
     :param pval_th:
     :param min_supp_reads:
     :param min_det_vaf:
-    :param biomarker_wt_freq_ml:
+    :param wt_hge_per_ml: array of wildtype biomarker (hGE) amount per plasma mL for each sample
     :param tube_size: liquid biopsy sampling tube size in blood liters
     :param panel_size: number of sequenced basepairs on panel
     :param seq_err: sequencing error rate per basepair
@@ -235,20 +234,20 @@ def calculate_specificity(n_samples, n_precursors, n_muts, min_det_muts, pval_th
     det_th = Detection(pval_th=pval_th, min_det_muts=None, min_supp_reads=min_supp_reads,
                        min_det_vaf=min_det_vaf)
     # calculate detected number of mutations just from sequencing noise
-    det_muts = perform_virtual_detection(
+    det_muts = simulate_virtual_detection(
             np.zeros(n_samples), det_th, muts_per_tumor=0, tube_size=tube_size,
             panel_size=panel_size, seq_err=seq_err, seq_eff=seq_eff,
-            biomarker_wt_freq_ml=biomarker_wt_freq_ml)
+            wt_hge_per_ml=wt_hge_per_ml)
 
     # run through all precursor lesions
     for i in range(n_precursors):
         bm_amount = get_random_bms_at_size(bn_lesion_size, d_bn * q_d_bn, b_bn - d_bn, elimination_rate, size=n_samples)
 
         # consider sequencing errors of absent mutations only in first run otherwise these would be distinct biopsies
-        det_muts += perform_virtual_detection(
+        det_muts += simulate_virtual_detection(
             bm_amount, det_th, muts_per_tumor=n_muts, tube_size=tube_size,
             # consider just mutations per precursor as sequencing errors of wildtype biomarkers were considered above
-            panel_size=n_muts, seq_err=seq_err, seq_eff=seq_eff, biomarker_wt_freq_ml=biomarker_wt_freq_ml)
+            panel_size=n_muts, seq_err=seq_err, seq_eff=seq_eff, wt_hge_per_ml=wt_hge_per_ml)
 
     screening_test = det_muts >= min_det_muts
     fpr = sum(screening_test) / float(n_samples)
@@ -256,8 +255,8 @@ def calculate_specificity(n_samples, n_precursors, n_muts, min_det_muts, pval_th
     return fpr
 
 
-def calculate_sensitivity(bm_amounts, n_muts, min_det_muts, pval_th, min_supp_reads, min_det_vaf,
-                          biomarker_wt_freq_ml, tube_size, panel_size, seq_err, seq_eff):
+def simulate_sensitivity(bm_amounts, n_muts, min_det_muts, pval_th, min_supp_reads, min_det_vaf,
+                         wt_hge_per_ml, tube_size, panel_size, seq_err, seq_eff):
     """
     Calculate the true-positive rate for the given tumors
     :param bm_amounts: biomarker amount circulating in blood stream that was shed from the tumor
@@ -266,7 +265,7 @@ def calculate_sensitivity(bm_amounts, n_muts, min_det_muts, pval_th, min_supp_re
     :param min_det_muts: number of detected mutations required for a positive tests
     :param min_supp_reads: minimal number of mutant reads that need to support a mutation to be called
     :param min_det_vaf: minimal VAF (variant allele frequency) of a mutation to be called
-    :param biomarker_wt_freq_ml: array of wildtype biomarker amount per plasma mL for each sample
+    :param wt_hge_per_ml: array of wildtype biomarker (hGE) amount per plasma mL for each sample
     :param tube_size: liquid biopsy sampling tube size in blood liters
     :param panel_size: number of sequenced basepairs on panel
     :param seq_err: sequencing error rate per basepair
@@ -278,9 +277,9 @@ def calculate_sensitivity(bm_amounts, n_muts, min_det_muts, pval_th, min_supp_re
     det_th = Detection(pval_th=pval_th, min_det_muts=min_det_muts, min_supp_reads=min_supp_reads,
                        min_det_vaf=min_det_vaf)
 
-    tumor_test = perform_virtual_detection(
+    tumor_test = simulate_virtual_detection(
         bm_amounts, det_th, muts_per_tumor=n_muts, tube_size=tube_size,
-        panel_size=panel_size, seq_err=seq_err, seq_eff=seq_eff, biomarker_wt_freq_ml=biomarker_wt_freq_ml)
+        panel_size=panel_size, seq_err=seq_err, seq_eff=seq_eff, wt_hge_per_ml=wt_hge_per_ml)
 
     # Calculate true positive rate (TPR), sensitivity, recall
     tpr = sum(tumor_test) / float(len(bm_amounts))

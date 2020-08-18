@@ -5,7 +5,9 @@ import numpy as np
 import pandas as pd
 from heapq import heappush, heappop
 
-from cbmlb.bp_formulas import get_time_to_biomarker, get_growth_fraction_rate, get_time_to_event_constant_pop
+from ctdna.bp_formulas import get_time_to_biomarker, get_growth_fraction_rate, get_time_to_event_constant_pop
+from ctdna.utils import Output
+import ctdna.settings as settings
 
 __date__ = 'October 19, 2018'
 __author__ = 'Johannes REITER'
@@ -17,6 +19,7 @@ DEATH_EVENT = 0
 DIVISION_EVENT = 1
 BIOMARKER_SHEDDING = 2
 BIOMARKER_ELIMINATION = 3
+SIM_RESOLUTION = 4
 
 
 class Lesion:
@@ -46,14 +49,17 @@ class Lesion:
         self.bm = 0  # initial biomarker amount
 
         self.age = 0.0  # measured in days
-        self.event_mean = self.b + self.d + self.lambda_1           # mean time to next event of cell
-        self.inv_event_mean = 1.0 / self.event_mean  # inverse of mean time to next event of cell
-        self.death_prob = self.d / self.event_mean  # death probability
-        self.death_div_prob = (self.d + self.b) / self.event_mean  # death plus division probability
-        self.inv_b = 1.0 / self.b  # inverse of the birth rate
-        self.inv_d = 1.0 / self.d  # inverse of the death rate
-        self.inv_epsilon = 1.0 / epsilon  # inverse of biomarker elimination rate
-        self.r = self.b - self.d  # growth rate
+
+        # number of treatment cyles
+        self.tx_cycles = 0
+
+        # initialize the following parameters in a function that can be reused
+        self.r = None
+        self.event_mean = self.inv_event_mean = None
+        self.death_prob = self.death_div_prob = None
+        self.inv_b = self.inv_d = None
+        self.inv_epsilon = None
+        self.set_rates()
 
         # event code: 0...die, 1...divide, 2...shedding (approximation), 3...biomarker is eliminated
         self.event_heap = list()
@@ -69,11 +75,58 @@ class Lesion:
         # calculate first cell event
         self._next_event_cell()
 
+        # calculate artificial next output dynamics event
+        if settings.DYN_OUTPUT_RESOLUTION is not None and settings.DYN_OUTPUT_RESOLUTION > 0:
+            self.output_step_size = settings.DYN_OUTPUT_RESOLUTION
+            self._next_resolution_event()
+
         # record history of lesion and biomarker dynamics for illustration
         self.history = np.ones([2, 1000]) * -1
         # initialize
         self.history[:, 0] = [self.size, self.bm]
         self.history_times = [0]
+
+    def set_rates(self):
+        """
+        Precalculate rates according the core parameter values
+        """
+        self.r = self.b - self.d  # growth rate
+        self.event_mean = self.b + self.d + self.lambda_1  # mean time to next event of cell
+        self.inv_event_mean = 1.0 / self.event_mean  # inverse of mean time to next event of cell
+        self.death_prob = self.d / self.event_mean  # death probability
+        self.death_div_prob = (self.d + self.b) / self.event_mean  # death plus division probability
+        self.inv_b = 1.0 / self.b  # inverse of the birth rate
+        self.inv_d = 1.0 / self.d  # inverse of the death rate
+        self.inv_epsilon = 1.0 / self.epsilon  # inverse of biomarker elimination rate
+
+    def start_treatment(self, b_treat, d_treat, q_d=None, q_b=None, lambda_1=None):
+        """
+        Update all parameters according to the treatment
+        :param b_treat: birth rate during treatment
+        :param d_treat: death during treatment
+        :param q_d: shedding probability during treatment per cell death
+        :param q_b: shedding probability during treatment per cell birth
+        :param lambda_1: shedding probability during treatment per unit of time
+        """
+        self.tx_cycles += 1
+        if b_treat < 0 or d_treat < 0:   # tumor is removed via surgery
+            logger.info(f'Removed tumor by surgery b\'={self.b} and d\'={self.d} (r\'={self.r:.2e}) '
+                        + f'when tumor had size of {self.size:.3e} cells and age of {self.age:.1f} days.')
+            self.size = 0
+            self.b = -1
+        else:
+            self.b = b_treat
+            self.d = d_treat
+            logger.info(f'Started treatment with b\'={self.b} and d\'={self.d} (r\'={self.r:.2e}) '
+                        + f'when tumor has size of {self.size:.3e} cells and age of {self.age:.1f} days.')
+        if q_d is not None:
+            self.q_d = q_d
+        if q_b is not None:
+            self.q_b = q_b
+        if lambda_1 is not None:
+            self.lambda_1 = lambda_1
+        # update all rates
+        self.set_rates()
 
     def sim_to_size(self, size_th, day_resolution=0):
         """
@@ -149,7 +202,7 @@ class Lesion:
         history[:, 2] = self.history[1, 0:n_max_time]
 
         df = pd.DataFrame(history,  # index=history,
-                          columns=['Time', 'LesionSize', 'BiomarkerLevel'])
+                          columns=[Output.col_time, Output.col_lesion_size, Output.col_bm_amount])
 
         # Write results to CSV files
         df.to_csv(output_fp, index=False)
@@ -213,6 +266,11 @@ class Lesion:
             assert self.bm >= 0, 'Biomarker level cannot be negative!'
             # logger.debug('Biomarker was eliminated. {} remaining.'.format(self.cfdna))
 
+        # artificial event to generate accurate output dynamics file
+        elif event == SIM_RESOLUTION:
+
+            self._next_resolution_event()
+
         elif event == -1:
             pass
 
@@ -251,6 +309,9 @@ class Lesion:
                 logger.debug('Growth of lesion is now deterministic. Size {:.2e}'.format(self.size))
             if self.r != 0:
                 t_shed, gr = get_time_to_biomarker(self.size, self.b, self.d, self.shedding_rate)
+                if t_shed == 0:
+                    logger.warning(f'Python may have reached its numerical precision limits! '
+                                   + f'size: {self.size:.3e}, shedding rate: {self.shedding_rate:.3e}')
             else:
                 t_shed = get_time_to_event_constant_pop(self.shedding_rate, self.size)
 
@@ -278,12 +339,25 @@ class Lesion:
 
         return t_to_next_event
 
+    def _next_resolution_event(self):
+        """
+        Adds artificial event to reach the desired output resolution
+        :return:
+        """
+
+        heappush(self.event_heap, (self.age + self.output_step_size, [-1], SIM_RESOLUTION))
+
     def _approximate_growth(self, t):
         """
         Perform deterministic growth for large lesion
         """
         if self.approx_cells:
             self.size *= get_growth_fraction_rate(self.r, t)
+
+            if self.r < 0 and self.size < self.exact_th:
+                self.approx_cells = False
+                self.size = round(self.size)
+                logger.debug('Growth of lesion is now again stochastic. Size {:.2e}'.format(self.size))
 
     def _log_history(self, day_resolution):
 
@@ -296,15 +370,15 @@ class Lesion:
             self.history = np.concatenate((self.history, tmp), axis=1)
 
         # log lesion size and biomarker amount
-        self.history[:, len(self.history_times) - 1] = [round(self.size, 1), self.bm]
+        self.history[:, len(self.history_times) - 1] = [round(self.size, 2), self.bm]
 
     def _output_sizes(self):
 
         if self.bm:
-            logger.debug('t: {:.1f}: lesion size: {:.1e} with {} biomarkers.'.format(
+            logger.debug('t: {:.1f}: lesion size: {:.3e} with {} biomarkers.'.format(
                 self.age, self.size, self.bm))
         else:
-            logger.debug('t: {:.1f}: lesion size: {:.1e} with no biomarkers.'.format(
+            logger.debug('t: {:.1f}: lesion size: {:.3e} with no biomarkers.'.format(
                 self.age, self.size))
 
 

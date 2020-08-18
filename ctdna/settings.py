@@ -1,7 +1,7 @@
 #!/usr/bin/python
 """Basic settings"""
 
-import os
+import scipy as sp
 
 __date__ = 'October 22, 2018'
 
@@ -39,10 +39,7 @@ DIPLOID_GE_WEIGHT_ng = 0.0066   # average yield of a nucleated cell is 6.6 pg of
 
 # default shedding probability per dell death inferred from Chabon et al, Nature 2020 and Abbosh et al, Nature 2017
 # 0.24 genome equivalents per cm^3 at the above calculated death rate of d=0.136
-Q_D_LUNG = 1.6e-4
-
-# approximate growth of tumor after it reaches a threshold
-EXACT_THRESHOLD = 1e4
+Q_D_LUNG = 1.4e-4
 
 # amount of blood per human
 BLOOD_AMOUNT = 5.0   # [liters]
@@ -55,24 +52,22 @@ PLASMA_FRACTION = 0.55
 TUBE_SIZE = 0.015  # [liters]
 
 # primary tumor size when a cancer becomes diagnosed due to symptoms
-SYMPTOMATIC_SIZE = 2.25e10   # median lung cancer detection size in SEER data
-
-# number of wildtype biomarkers per plasma mL
-# (~1500 for Stage 1 cancers and ~2200 for Stage 3 cancers, ~656 for normals and 954 for stage I in Cohen et al)
-# 1500 GE (genome equivalents), Heitzer et al, NRG 2019
-# for virtual screening the plasma DNA concentrations are sampled from a beta-binomial distribution and
-# the number of wildtype (WT) genome equivalents are calculated from the amount of sampled DNA
-NO_WT_BIOMARKERS_ML = 1000
+DIAGNOSIS_SIZE = 2.25e10   # median lung cancer detection size in SEER data
 
 # sequencing panel size for virtual detection
-PANEL_SIZE = 300000  # CAPP-Seq covers 302,620 bases according to Newman et al, Nature Biotechnology 2016
+CAPPSEQ_SIZE = 300000    # CAPP-Seq covers 302,620 bases according to Newman et al, Nature Biotechnology 2016
+CANCERSEEK_SIZE = 2000   # CancerSeek covers 2,001 bases according to Cohen et al, Science 2018
+PANEL_SIZE = CANCERSEEK_SIZE
 
-# base sequencing error rate   # see Newman et al, Nature Biotechnology 2016 or Phallen et al, STM 2017
-# a sequencing error rate of 1.1e-4 was reported by McDonald et al, STM 2019
-SEQUENCING_ERROR_RATE = 1.5e-5
+# base sequencing error rate
+# 1.1e-4 McDonald et al, STM 2019
+# 1.5e-5 Newman et al, Nature Biotechnology 2016
+# 2e-6 Wan et al, STM 2020
+# 3e-7 Phallen et al, STM 2017
+SEQUENCING_ERROR_RATE = 1.0e-5
 
 # fraction of molecules in sample that get sequenced; perhaps as low as 50% (Chabon et al, Nature 2020)
-SEQUENCING_EFFICIENCY = 1
+SEQUENCING_EFFICIENCY = 0.5
 
 # default output directory
 OUTPUT_DIR_NAME = 'output'
@@ -80,7 +75,9 @@ OUTPUT_DIR_NAME = 'output'
 # parameter values to mimic distribution of plasma DNA concentrations
 # based on a Gamma distribution to capture overdispersion
 # fitted to data of stage 1 cancers in Cohen et al, Science 2018 with fit argument floc=0
-FIT_GAMMA_PARAMS = {  # mean 6.287e+00, median 5.203e+00 ng/mL
+# mean 6.287e+00, median 5.203e+00 ng/mL
+# mean 953 hGE per plasma mL
+FIT_GAMMA_PARAMS = {
     'shape': 1.86,
     'location': 0.0,
     'scale': 3.38
@@ -100,3 +97,11 @@ FIT_BETA_PARAMS = {
 DT_PDA_PT = 144
 # growth rate of pancreatic cancer mets according to Amikura et al, 2001: 0.0123
 DT_PDA_MET = 56       # median doubling time in PDA mets (Amikura et al, 1995)
+
+# ####### DYNAMICS MODE ########
+# approximate growth of tumor after it reaches a threshold
+EXACT_THRESHOLD = 1e4
+
+# output dynamics file resolution [days]
+# if biomarker changes are sufficient (at most one per day), set to None
+DYN_OUTPUT_RESOLUTION = 1.0

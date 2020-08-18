@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 
 
-from cbmlb.lesion import PT, Precursor
-from cbmlb.utils import Output
+from ctdna.lesion import PT, Precursor
+from ctdna.utils import Output
 
 __date__ = 'October 21, 2018'
 __author__ = 'Johannes REITER'
@@ -15,14 +15,9 @@ __author__ = 'Johannes REITER'
 # get logger
 logger = logging.getLogger(__name__)
 
-# ########################################### USAGE #########################################
-# python3 lesions_sim.py -b 0.1 -d 0.1 -i 1 -n 10 -M 3e8 -T 300010 -o '../data/dynamics/'
-# python3 lesions_sim.py -b 0.07 -d 0.07 -i 1 -n 20 -M 3.4e7 -T 1000 -o '../data/dynamics/'
-# python3 lesions_sim.py -b 0.14 -d 0.136 -n 100 -M 0 -T 3000 -o '../data/detection/' --qd=0.0 --qb=0.0 --lambda1=2.0e-5 --exact_th=1.0e7
-# ###########################################################################################
 
-
-def sim_n_pt_subjects(n_subjects, b, d, q_d, epsilon, q_b=0.0, lambda_1=0.0, det_size=None, sim_time=None,
+def sim_n_pt_subjects(n_subjects, b, d, q_d, epsilon, q_b=0, lambda_1=0, det_size=None, sim_time=None,
+                      tx_start=None, b_treat=None, d_treat=None,
                       exact_th=1e4, starting_id=1, dynamics_output_fp=None, distr_output_fp=None):
     """
     Simulate the growth dynamics and the shedding of biomarkers in n subjects
@@ -35,6 +30,9 @@ def sim_n_pt_subjects(n_subjects, b, d, q_d, epsilon, q_b=0.0, lambda_1=0.0, det
     :param lambda_1: biomarker shedding probability per unit of time (necrosis)
     :param det_size: primary tumor detection size
     :param sim_time: number of days to simulate the biomarker shedding of the lesion
+    :param tx_start: tumor size at the start of treatment if there is a treatment
+    :param b_treat: birth rate during treatment
+    :param d_treat: death during treatment
     :param exact_th: max primary tumor size for exact simulation
     :param starting_id: starting identifier for simulated cases
     :param dynamics_output_fp: export detailed dynamics to the given file path (needs to contain <<>> to be
@@ -53,7 +51,18 @@ def sim_n_pt_subjects(n_subjects, b, d, q_d, epsilon, q_b=0.0, lambda_1=0.0, det
             # initialize primary tumor
             pt = PT(b, d, q_d, epsilon, exact_th, q_b=q_b, lambda_1=lambda_1)
 
-            if det_size is not None and det_size > 1:
+            if tx_start is not None and tx_start > 1:
+                # simulate tumor until it reaches treatment start size
+                pt_size = pt.sim_to_size(tx_start)
+
+                if pt_size > 0:
+                    # treatment starts => update cell birth, death, and shedding rates accordingly
+                    pt_size = pt.start_treatment(b_treat, d_treat)
+
+                    # simulate tumor until it reaches detection size or goes extinct
+                    pt_size = pt.sim_to_size(det_size)
+
+            elif det_size is not None and det_size > 1:
                 # simulate tumor until it reaches detection size
                 pt_size = pt.sim_to_size(det_size)
             elif sim_time is not None and sim_time > 0:
@@ -62,13 +71,23 @@ def sim_n_pt_subjects(n_subjects, b, d, q_d, epsilon, q_b=0.0, lambda_1=0.0, det
             else:
                 raise RuntimeError('Either a detection size or a simulation time needs to be provided!')
 
-            if pt_size > 0:
+            # was this a successfully simulated cancer? If yes, simulate the next one
+            if pt_size > 0 or pt.tx_cycles > 0:
                 logger.debug('PT {} detected with size {:.1e} at age {:.1f} days with {} biomarkers.'.format(
                     sub_id, pt_size, pt.age, pt.bm))
 
                 pt_sizes.append(pt_size)
                 ages.append(pt.age)
                 bms_at_det_size.append(pt.bm)
+
+                # path to dynamics output file is given, export to CSV file
+                if dynamics_output_fp is not None:
+                    if '<<>>' not in dynamics_output_fp:
+                        raise RuntimeError(
+                            'Output filename needs to contain <<>> to be replaced with subject ID: {}'.format(
+                                dynamics_output_fp))
+
+                    pt.export_history(dynamics_output_fp.replace('<<>>', '{:04d}'.format(sub_id)))
 
                 logger.debug('Biomarkers at lesion {}: {:.3e} median, {:.3e} mean'.format(
                     'size {:.1e} (t={:.0e})'.format(det_size, np.mean(ages)) if det_size is not None
@@ -82,30 +101,22 @@ def sim_n_pt_subjects(n_subjects, b, d, q_d, epsilon, q_b=0.0, lambda_1=0.0, det
                                         else 'age {:.0e} (size {:.1e})'.format(sim_time, np.mean(pt_sizes)),
                                         d, np.mean(bms_at_det_size), np.var(bms_at_det_size)))
 
-                # path to dynamics output file is given, export to CSV file
-                if dynamics_output_fp is not None:
-                    if '<<>>' not in dynamics_output_fp:
-                        raise RuntimeError(
-                            'Output filename needs to contain <<>> to be replaced with subject ID: {}'.format(
-                                dynamics_output_fp))
-
-                    pt.export_history(dynamics_output_fp.replace('<<>>', '{:04d}'.format(sub_id)))
-
                 # save temporary results to given file
-                elif distr_output_fp is not None:
-                    # append new results if file already exists and contains some results
-                    if sub_id > 1 and os.path.isfile(distr_output_fp):
-                        with open(distr_output_fp, 'a') as f:
-                            f.write(f'{pt.bm}\n')
-                    else:
-                        pd.DataFrame(bms_at_det_size, columns=[Output.col_bm_amount]).to_csv(distr_output_fp,
-                                                                                             index=False)
+                if pt_size > 0:
+                    if distr_output_fp is not None:
+                        # append new results if file already exists and contains some results
+                        if sub_id > 1 and os.path.isfile(distr_output_fp):
+                            with open(distr_output_fp, 'a') as f:
+                                f.write(f'{pt.bm}\n')
+                        else:
+                            pd.DataFrame(bms_at_det_size, columns=[Output.col_bm_amount]).to_csv(
+                                distr_output_fp, index=False)
 
                 break
 
     logger.info('Simulated {} PT subjects. Biomarkers at lesion {}: {:.5e} median, {:.5e} mean, {:.5e} variance'.format(
-        n_subjects, 'size {:.1e} (mean t={:.0e})'.format(det_size, np.mean(ages)) if det_size is not None
-        else 'age {:.1e} (mean size {:.1e})'.format(sim_time, np.mean(pt_sizes)),
+        n_subjects, f'size {det_size:.1e} (mean t={np.mean(ages):.0e})' if det_size is not None
+        else f'age {sim_time:.1e} (mean size {np.mean(pt_sizes):.1e})',
         np.median(bms_at_det_size), np.mean(bms_at_det_size), np.var(bms_at_det_size)))
 
     return bms_at_det_size
