@@ -375,12 +375,11 @@ def simulate_pval_th(annual_fpr_th, smp_frq, n_precursors, bn_lesion_size, d_bn,
     return pval_th
 
 
-def calculate_detection_probability(n_min_det_muts, pval_th, panel_size, n_muts_cancer,
-                                    hge_tumors, n_hge_normal, seq_err, sample_fraction):
+def calculate_detection_probability(n_min_det_muts, panel_size, n_muts_cancer, hge_tumors,
+                                    n_hge_normal, seq_err, sample_fraction, pval_th=None, required_mt_frags=None):
     """
     Calculate the probability to detect a tumor if there are hge_tumor hGE circulating in the entire bloodstream
     :param n_min_det_muts: number of minimally called mutations required for a positive cancer detection test
-    :param pval_th: p-value threshold to call an individual mutation in the panel
     :param panel_size: sequencing panel size
     :param n_muts_cancer: number of mutations covered by the panel that are clonally present in the tumor
     :param hge_tumors: array_like numbers of haploid genome equivalents (hGE) circulating in the entire bloodstream
@@ -388,6 +387,8 @@ def calculate_detection_probability(n_min_det_muts, pval_th, panel_size, n_muts_
                         (will be multiplied by two to account for diploid genomes)
     :param seq_err: sequencing error rate per basepair
     :param sample_fraction: fraction of the bloodstream that is sampled
+    :param pval_th: p-value threshold to call an individual mutation in the panel
+    :param required_mt_frags: minimum number of mutated fragments required to call mutation at a given position
     :return: probability that the test will be positive
     """
     n_genomes_total = 2 * n_hge_normal + 2 * hge_tumors
@@ -396,55 +397,99 @@ def calculate_detection_probability(n_min_det_muts, pval_th, panel_size, n_muts_
 
     mt_prob = sample_fraction * ((normal_vaf * seq_err) + (tumor_vaf * (1 - seq_err)))
     seq_err_prob = sample_fraction * seq_err
-    # extreme maximum of mutated fragments that could be expected under any conditions
-    n_max_frags = int(round(max(binom.ppf(1.0 - 1e-10, n=n_genomes_total, p=seq_err_prob)))) + 2
 
-    prob_k_more = np.zeros((n_max_frags, len(hge_tumors)))
-    pvals = np.zeros_like(prob_k_more)
+    if pval_th is None and required_mt_frags is None:
+        err_str = ('Either a p-value threshold or a number of required mutant fragments is needed '
+                   'to compute detection probability.')
+        logger.error(err_str)
+        raise RuntimeError(err_str)
 
-    for k in range(n_max_frags, 0, -1):
-        # probability to observe k or more mutant fragments of each of the minimally called mutations for detection
-        mt_prob_mt_pos = binom.sf(k=k - 1, n=n_genomes_total, p=mt_prob)
+    elif pval_th is not None and required_mt_frags is not None:
+        err_str = ('Only a p-value threshold or a number of required mutant fragments should be given '
+                   'to compute detection probability. Not both.')
+        logger.error(err_str)
+        raise RuntimeError(err_str)
 
-        # probability to observe k or more mutant fragments at positions not mutated in the tumor
-        mt_prob_wt_pos = binom.sf(k=k - 1, n=n_genomes_total, p=seq_err_prob)
+    elif required_mt_frags is not None:
+
+        # probability to observe required_mt_frags or more mutant fragments of each of the minimally called mutations
+        # for detection
+        mt_prob_mt_pos = binom.sf(k=required_mt_frags - 1, n=n_genomes_total, p=mt_prob)
+
+        # probability to observe required_mt_frags or more mutant fragments at positions not mutated in the tumor
+        mt_prob_wt_pos = binom.sf(k=required_mt_frags - 1, n=n_genomes_total, p=seq_err_prob)
 
         # sum probabilities of combinations in which n_min_det_muts mutations can be detected
         probs = np.zeros((n_min_det_muts + 1, len(hge_tumors)))
         for det_muts in range(n_min_det_muts + 1):
 
-            # observe a mutation with at least k fragments at a mutated position in the tumor
+            # observe a mutation with at least required_mt_frags fragments at a mutated position in the tumor
             if det_muts == n_min_det_muts:
                 probs[det_muts, :] = binom.sf(k=det_muts - 1, n=n_muts_cancer, p=mt_prob_mt_pos)
             else:
                 probs[det_muts, :] = binom.pmf(k=det_muts, n=n_muts_cancer, p=mt_prob_mt_pos)
 
-            # observe a mutation with at least k fragments at a position not mutated in the tumor
+            # observe a mutation with at least required_mt_frags fragments at a position not mutated in the tumor
             probs[det_muts, :] *= binom.sf(k=n_min_det_muts - det_muts - 1, n=panel_size - n_muts_cancer,
                                            p=mt_prob_wt_pos)
 
         # sum each column which denotes the probability that at least X mutations are detected
-        prob_k_more[k - 1, :] = np.sum(probs, axis=0)
-        logger.debug(f'Probability to observe at least {k} mutant fragments at the {n_min_det_muts}th '
-                     + f'most mutated basepair: {np.mean(prob_k_more[k - 1, :]):.3e}')
+        det_prob = np.sum(probs, axis=0)
+        logger.debug(f'Probability to observe at least {required_mt_frags} mutant fragments at the {n_min_det_muts}th '
+                     + f'most mutated basepair: {det_prob}')
 
-        # probability to observe k or more mutant fragments at a basepair due to sequencing errors
-        pvals[k - 1, :] = binom.sf(k=k - 1, n=n_genomes_total, p=seq_err_prob)
+        return det_prob
 
-    # detection probability is equivalent to probability that a p-value less or equal to p-value threshold is observed
-    # take the minimal number of mutated fragments required that achieve a p-value lower or equal to the threshold
-    required_mt_frags = np.argmin(pvals > pval_th, axis=0)
-    # logger.info(f'{n_min_det_muts} muts required for detection requires: mean {np.mean(required_mt_frags)}, '
-    #             + f'median {np.median(required_mt_frags)} mutant fragments.')
-    det_prob = np.take_along_axis(prob_k_more, np.expand_dims(required_mt_frags, axis=0), axis=0)[0, :]
+    else:
+        # extreme maximum of mutated fragments that could be expected under any conditions
+        n_max_frags = int(round(max(binom.ppf(1.0 - 1e-10, n=n_genomes_total, p=seq_err_prob)))) + 2
 
-    return det_prob, required_mt_frags + 1
+        prob_k_more = np.zeros((n_max_frags, len(hge_tumors)))
+        pvals = np.zeros_like(prob_k_more)
+
+        for k in range(n_max_frags, 0, -1):
+            # probability to observe k or more mutant fragments of each of the minimally called mutations for detection
+            mt_prob_mt_pos = binom.sf(k=k - 1, n=n_genomes_total, p=mt_prob)
+
+            # probability to observe k or more mutant fragments at positions not mutated in the tumor
+            mt_prob_wt_pos = binom.sf(k=k - 1, n=n_genomes_total, p=seq_err_prob)
+
+            # sum probabilities of combinations in which n_min_det_muts mutations can be detected
+            probs = np.zeros((n_min_det_muts + 1, len(hge_tumors)))
+            for det_muts in range(n_min_det_muts + 1):
+
+                # observe a mutation with at least k fragments at a mutated position in the tumor
+                if det_muts == n_min_det_muts:
+                    probs[det_muts, :] = binom.sf(k=det_muts - 1, n=n_muts_cancer, p=mt_prob_mt_pos)
+                else:
+                    probs[det_muts, :] = binom.pmf(k=det_muts, n=n_muts_cancer, p=mt_prob_mt_pos)
+
+                # observe a mutation with at least k fragments at a position not mutated in the tumor
+                probs[det_muts, :] *= binom.sf(k=n_min_det_muts - det_muts - 1, n=panel_size - n_muts_cancer,
+                                               p=mt_prob_wt_pos)
+
+            # sum each column which denotes the probability that at least X mutations are detected
+            prob_k_more[k - 1, :] = np.sum(probs, axis=0)
+            logger.debug(f'Probability to observe at least {k} mutant fragments at the {n_min_det_muts}th '
+                         + f'most mutated basepair: {np.mean(prob_k_more[k - 1, :]):.3e}')
+
+            # probability to observe k or more mutant fragments at a basepair due to sequencing errors
+            pvals[k - 1, :] = binom.sf(k=k - 1, n=n_genomes_total, p=seq_err_prob)
+
+        # detection probability is equivalent to probability that p-value less or equal to p-value threshold is observed
+        # take the minimal number of mutated fragments required that achieve a p-value lower or equal to the threshold
+        required_mt_frags = np.argmin(pvals > pval_th, axis=0)
+        # logger.info(f'{n_min_det_muts} muts required for detection requires: mean {np.mean(required_mt_frags)}, '
+        #             + f'median {np.median(required_mt_frags)} mutant fragments.')
+        det_prob = np.take_along_axis(prob_k_more, np.expand_dims(required_mt_frags, axis=0), axis=0)[0, :]
+
+        return det_prob, required_mt_frags + 1
 
 
 def calculate_sensitivity(b, d, q_d, epsilon, n_min_det_muts, panel_size, n_muts_cancer,
-                          pval_th, dna_conc_gamma_params=settings.FIT_GAMMA_PARAMS, tube_size=settings.TUBE_SIZE,
+                          dna_conc_gamma_params=settings.FIT_GAMMA_PARAMS, tube_size=settings.TUBE_SIZE,
                           seq_err=settings.SEQUENCING_ERROR_RATE, seq_eff=settings.SEQUENCING_EFFICIENCY,
-                          resolution=100, hge_tumors=None, tumor_sizes=None):
+                          resolution=100, hge_tumors=None, tumor_sizes=None, pval_th=None, required_mt_frags=None):
     """
     Calculate the sensitivities to detect a tumor if there are hge_tumor hGE circulating in the entire bloodstream or
     a tumor of certain size is present and sheds ctDNA hGE according to a poisson-distribution
@@ -455,7 +500,6 @@ def calculate_sensitivity(b, d, q_d, epsilon, n_min_det_muts, panel_size, n_muts
     :param n_min_det_muts: array of minimally required called mutation numbers for a positive test
     :param panel_size: sequencing panel size
     :param n_muts_cancer: number of mutations covered by the panel that are clonally present in the tumor
-    :param pval_th: p-value threshold to call individual mutations as present
     :param dna_conc_gamma_params: plasma DNA concentration is sampled from the given gamma distribution parameters
     :param tube_size: amount of blood that is sampled per liquid biopsy [liters]
     :param seq_err: sequencing error rate per base-pair
@@ -464,12 +508,26 @@ def calculate_sensitivity(b, d, q_d, epsilon, n_min_det_muts, panel_size, n_muts
     :param hge_tumors: number of normal hGE circulating in the entire bloodstream
                         (will be multiplied by two to account for diploid genomes)
     :param tumor_sizes: if hge_tumors is None, then an array of tumor sizes needs to be provided
+    :param pval_th: p-value threshold to call individual mutations as present
+    :param required_mt_frags: minimum number of mutated fragments required to call mutation at a given position
     :return: array of sensitivities for the given tumor sizes or fixed hGEs
     """
 
     if hge_tumors is None and tumor_sizes is None:
         raise RuntimeError('Either an array with ctDNA hGE in the bloodstream or '
                            'an array of tumor sizes needs to be given.')
+
+    if pval_th is None and required_mt_frags is None:
+        err_str = ('Either a p-value threshold or a number of required mutant fragments is needed '
+                   'to compute detection probability.')
+        logger.error(err_str)
+        raise RuntimeError(err_str)
+
+    elif pval_th is not None and required_mt_frags is not None:
+        err_str = ('Only a p-value threshold or a number of required mutant fragments should be given '
+                   'to compute detection probability. Not both.')
+        logger.error(err_str)
+        raise RuntimeError(err_str)
 
     pcts = np.linspace(1.0 / resolution, 1 - 1.0 / resolution, resolution - 1)
 
@@ -504,43 +562,76 @@ def calculate_sensitivity(b, d, q_d, epsilon, n_min_det_muts, panel_size, n_muts
 
     # calculate sensitivity for a fixed specificity with a varying numbers of required mutations for detection
     sensitivities = np.zeros((len(hge_tumors)))
-    for k, hges in enumerate(hge_tumors):
 
-        tumor_test = np.zeros((len(hges) * len(cfdna_hge_total)))
-        required_mt_frags = np.zeros((len(hges) * len(cfdna_hge_total)))
-        # combine all percentiles of hGEs with all percentiles of plasma DNA concentrations
-        for j in range(len(cfdna_hge_total)):
-            tumor_test[j * len(hges):(j + 1) * len(hges)], required_mt_frags[j * len(hges):(j + 1) * len(hges)] = \
-                calculate_detection_probability(n_min_det_muts, pval_th, panel_size, n_muts_cancer,
-                                                hges, cfdna_hge_total[j], seq_err, sample_fraction)
+    if pval_th is not None:
 
-        # Calculate true positive rate (TPR), sensitivity, recall
-        sensitivities[k] = sum(tumor_test) / float(len(tumor_test))
-        logger.info(
-            f'{n_min_det_muts} called muts required for detection need: mean {np.mean(required_mt_frags):.3f}, '
-            + f'median {np.median(required_mt_frags)} mutant fragments.')
+        for k, hges in enumerate(hge_tumors):
 
-        logger.info(f'Sensitivity for tumor size {tumor_sizes[k]:.1e} (mean {np.mean(hges):.1f} hGE, '
-                    + f'{n_min_det_muts} called muts): {sensitivities[k]:.3%} (pv {pval_th:.3e})')
+            tumor_test = np.zeros((len(hges) * len(cfdna_hge_total)))
+            required_mt_frags = np.zeros((len(hges) * len(cfdna_hge_total)))
+            # combine all percentiles of hGEs with all percentiles of plasma DNA concentrations
+            for j in range(len(cfdna_hge_total)):
+                tumor_test[j * len(hges):(j + 1) * len(hges)], required_mt_frags[j * len(hges):(j + 1) * len(hges)] = \
+                    calculate_detection_probability(n_min_det_muts, panel_size, n_muts_cancer,
+                                                    hges, cfdna_hge_total[j], seq_err, sample_fraction, pval_th=pval_th)
+
+            # Calculate true positive rate (TPR), sensitivity, recall
+            sensitivities[k] = sum(tumor_test) / float(len(tumor_test))
+            logger.info(
+                f'{n_min_det_muts} called muts required for detection need: mean {np.mean(required_mt_frags):.3f}, '
+                + f'median {np.median(required_mt_frags)} mutant fragments.')
+
+            logger.info(f'Sensitivity for tumor size {tumor_sizes[k]:.1e} (mean {np.mean(hges):.1f} hGE, '
+                        + f'{n_min_det_muts} called muts): {sensitivities[k]:.3%} (pv {pval_th:.3e})')
+
+    else:
+
+        for k, hges in enumerate(hge_tumors):
+
+            tumor_test = np.zeros((len(hges) * len(cfdna_hge_total)))
+            # combine all percentiles of hGEs with all percentiles of plasma DNA concentrations
+            for j in range(len(cfdna_hge_total)):
+                tumor_test[j * len(hges):(j + 1) * len(hges)] = \
+                        calculate_detection_probability(n_min_det_muts, panel_size, n_muts_cancer,
+                                                        hges, cfdna_hge_total[j], seq_err, sample_fraction,
+                                                        required_mt_frags=required_mt_frags)
+
+            # Calculate true positive rate (TPR), sensitivity, recall
+            sensitivities[k] = sum(tumor_test) / float(len(tumor_test))
+
+            logger.info(f'Sensitivity for tumor size {tumor_sizes[k]:.1e} (mean {np.mean(hges):.1f} hGE, '
+                        + f'{n_min_det_muts} called muts): {sensitivities[k]:.3%} (pv {pval_th:.3e})')
 
     return sensitivities
 
-
-def calculate_specificity(n_min_det_muts, pval_th, panel_size, dna_conc_gamma_params=settings.FIT_GAMMA_PARAMS,
+def calculate_specificity(n_min_det_muts, panel_size, dna_conc_gamma_params=settings.FIT_GAMMA_PARAMS,
                           tube_size=settings.TUBE_SIZE, seq_err=settings.SEQUENCING_ERROR_RATE,
-                          seq_eff=settings.SEQUENCING_EFFICIENCY, resolution=100):
+                          seq_eff=settings.SEQUENCING_EFFICIENCY, resolution=100, pval_th=None, required_mt_frags=None):
     """
     Calculate the specificity for a cancer detection test at the given plasma DNA concentration distribution
     :param n_min_det_muts: minimal number of required called mutations for a positive test
-    :param pval_th: p-value threshold to call a mutation as present
     :param panel_size: sequencing panel size
     :param dna_conc_gamma_params: plasma DNA concentration is sampled from the given gamma distribution parameters
     :param tube_size: amount of blood that is sampled per liquid biopsy [liters]
     :param seq_err: sequencing error rate per base-pair
     :param seq_eff: sequencing efficiency
     :param resolution: number of points of discretized distribution considered for calculations
+    :param pval_th: p-value threshold to call a mutation as present
+    :param required_mt_frags: minimum number of mutated fragments required to call mutation at a given position
     :return: specificity
     """
+    if pval_th is None and required_mt_frags is None:
+        err_str = ('Either a p-value threshold or a number of required mutant fragments is needed '
+                   'to compute detection probability.')
+        logger.error(err_str)
+        raise RuntimeError(err_str)
+
+    elif pval_th is not None and required_mt_frags is not None:
+        err_str = ('Only a p-value threshold or a number of required mutant fragments should be given '
+                   'to compute detection probability. Not both.')
+        logger.error(err_str)
+        raise RuntimeError(err_str)
+
     # pcts = np.linspace(0.01, 0.99, 99)
     pcts = np.linspace(1.0 / resolution, 1 - 1.0 / resolution, resolution - 1)
 
@@ -563,9 +654,14 @@ def calculate_specificity(n_min_det_muts, pval_th, panel_size, dna_conc_gamma_pa
     # calculate specificity for a given p-value threshold and number of required mutations for detection
     tumor_test = np.zeros(len(pcts))
     for j in range(len(pcts)):
-        tumor_test[j], _ = calculate_detection_probability(
-            n_min_det_muts, pval_th, panel_size, 0,
-            np.zeros(1), cfdna_hge_total[j], seq_err, sample_fraction)
+        if pval_th is not None:
+            tumor_test[j], _ = calculate_detection_probability(
+                n_min_det_muts, panel_size, 0,
+                np.zeros(1), cfdna_hge_total[j], seq_err, sample_fraction, pval_th=pval_th)
+        else:
+            tumor_test[j], = calculate_detection_probability(
+                n_min_det_muts, panel_size, 0,
+                np.zeros(1), cfdna_hge_total[j], seq_err, sample_fraction, required_mt_frags=required_mt_frags)
 
     # Calculate true positive rate (TPR), sensitivity, recall
     specificity = 1.0 - (sum(tumor_test) / float(len(tumor_test)))

@@ -95,6 +95,8 @@ def main(raw_args=None):
                             dest='sampling_times',
                             help='Times at which a liquid biopsy is taken in days of tumor age')
 
+    parser_det.add_argument('--no_ctDNA', dest='no_ctDNA', default=False, action='store_true')
+
     group = parser_det.add_mutually_exclusive_group()
     group.add_argument('--diagnosis_size', type=float, default=settings.DIAGNOSIS_SIZE,
                        help='size when a tumor becomes diagnosed due to symptoms (ignored by sampling)')
@@ -426,11 +428,10 @@ def main(raw_args=None):
 
             # RELAPSE
             if args.imaging_det_size is not None:
-                diag_size_col = None
                 lb_det_sizes, lb_det_times, _, lead_times = perform_longitudinal_sampling(
                     tumor_fps, sampling_freq, sampling_times, wt_hge_per_ml, det_th,
                     args.n_muts, args.tube_size, args.panel_size, args.seq_err, args.seq_eff,
-                    imaging_det_size=args.imaging_det_size, n_replications=args.n_replications)
+                    imaging_det_size=args.imaging_det_size, n_replications=args.n_replications, no_ctDNA=args.no_ctDNA)
 
                 df_det = pd.DataFrame({Output.col_det_size: lb_det_sizes, Output.col_det_time: lb_det_times,
                                        Output.col_lead_t_img: lead_times})
@@ -447,7 +448,8 @@ def main(raw_args=None):
                 lb_det_sizes, lb_det_times, symptomatic_det_times, lead_times = perform_longitudinal_sampling(
                     tumor_fps, sampling_freq, sampling_times, wt_hge_per_ml, det_th,
                     args.n_muts, args.tube_size, args.panel_size, args.seq_err, args.seq_eff,
-                    diagnosis_size=diag_size, symptomatic_size=sympt_size, n_replications=args.n_replications)
+                    diagnosis_size=diag_size, symptomatic_size=sympt_size, n_replications=args.n_replications,
+                    no_ctDNA=args.no_ctDNA)
 
                 if len(lb_det_sizes) == 0:
                     logger.warning('No valid samplings for the provided sampling times. Try different parameters. ')
@@ -489,7 +491,8 @@ def main(raw_args=None):
                           + f'{stats_string(cells_diameter(df_det[Output.col_det_size]))}')
             logger.info(str_res_dm)
 
-            if (sympt_size is not None or diag_size is not None) and Output.col_diag_size is not None:
+            if (sympt_size is not None or diag_size is not None) and Output.col_symp_time in df_det.columns.values:
+
                 sympt_vol = sympt_size if diag_size is None else diag_size
 
                 # sizes of screen-detected cancers

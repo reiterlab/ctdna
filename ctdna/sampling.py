@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 def perform_longitudinal_sampling(sim_tumor_fps, sampling_freq, fixed_sampling_times, wt_hges_per_ml, det_th,
                                   muts_per_cancer, tube_size, panel_size, seq_err, seq_eff,
-                                  imaging_det_size=None, symptomatic_size=None, diagnosis_size=None, n_replications=1):
+                                  imaging_det_size=None, symptomatic_size=None, diagnosis_size=None, n_replications=1,
+                                  no_ctDNA=False):
     """
     Take liquid biopsies with the given frequency or at the given times and then see whether the biomarker is above
     the detection threshold
@@ -38,6 +39,7 @@ def perform_longitudinal_sampling(sim_tumor_fps, sampling_freq, fixed_sampling_t
     :param symptomatic_size: size when tumors become symptomatic and hence will be diagnosed without an additional test
     :param diagnosis_size: size when tumors become symptomatic and hence will be diagnosed without an additional test
     :param n_replications: number of replications with randomized sampling start time
+    :param no_ctDNA: if true longitudinal sampling is performed assuming no ctDNA in the bloodstream
     :return: arrays of screening detection sizes, screening detection times, symptomatic times, and lead_times
     """
 
@@ -61,6 +63,9 @@ def perform_longitudinal_sampling(sim_tumor_fps, sampling_freq, fixed_sampling_t
         logger.debug('Reading dynamics from file: {}'.format(tumor_fp))
         # evolution of tumor data and its biomarker levels
         df_tumor = pd.read_csv(tumor_fp, index_col='Time')
+        if no_ctDNA:
+            df_tumor['Biomarker_total'].values[:] = 0
+
         # calculate MRD (minimal residual disease) time
         mrd_time = max(0, df_tumor[df_tumor[Output.col_lesion_size] > screening_start_size].index[0])
 

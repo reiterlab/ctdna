@@ -52,8 +52,8 @@ class IntegrationTest(unittest.TestCase):
 
         det_probs = calculate_sensitivity(
             b_lung, d_lung, q_d_lung, epsilon, n_det_muts, panel_size, n_muts_cancer,
-            pval_th, dna_conc_gamma_params=dna_conc_gamma_params,
-            seq_err=seq_err, seq_eff=seq_eff, tumor_sizes=tumor_sizes)
+            dna_conc_gamma_params=dna_conc_gamma_params, seq_err=seq_err, seq_eff=seq_eff,
+            tumor_sizes=tumor_sizes, pval_th=pval_th)
 
         np.testing.assert_array_almost_equal(det_probs, [0.17622353, 0.55962951, 0.90654751])
 
