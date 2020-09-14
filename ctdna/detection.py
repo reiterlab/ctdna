@@ -512,7 +512,6 @@ def calculate_sensitivity(b, d, q_d, epsilon, n_min_det_muts, panel_size, n_muts
     :param required_mt_frags: minimum number of mutated fragments required to call mutation at a given position
     :return: array of sensitivities for the given tumor sizes or fixed hGEs
     """
-
     if hge_tumors is None and tumor_sizes is None:
         raise RuntimeError('Either an array with ctDNA hGE in the bloodstream or '
                            'an array of tumor sizes needs to be given.')
@@ -603,6 +602,7 @@ def calculate_sensitivity(b, d, q_d, epsilon, n_min_det_muts, panel_size, n_muts
                         + f'{n_min_det_muts} called muts): {sensitivities[k]:.3%} (pv {pval_th:.3e})')
 
     return sensitivities
+
 
 def calculate_specificity(n_min_det_muts, panel_size, dna_conc_gamma_params=settings.FIT_GAMMA_PARAMS,
                           tube_size=settings.TUBE_SIZE, seq_err=settings.SEQUENCING_ERROR_RATE,
