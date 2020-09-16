@@ -110,13 +110,16 @@ class DetectionTest(unittest.TestCase):
 
         quantiles = np.array([0.25, 0.5, 0.75])
         # computing the scale parameter for the gamma distribution of cfDNA hGE in a plasma sample
+
+        # TODO: Stefano, it seems you calculated the number of total genomes (both copies) rather than hGE here
+        # note that the function calculate_detection_probability takes hGE and not number of genomes as input
         hge_normal_scale = self.dna_conc_gamma_params['scale'] * self.tube_size * self.plasma_fraction \
                            * 2 / self.diploid_genome_weight_ng
         n_hge_normal = np.rint(np.array([sp.stats.gamma.ppf(
             qnt, self.dna_conc_gamma_params['shape'], loc=0, scale=hge_normal_scale)
             for qnt in quantiles])).astype(int)
 
-        # HANNES: PLEASE ADD A TEST CASE DIRECTLY TESTING FOR THE VALUES OF DET_PROB AND REQUIRED_MT_FRAGS
+        # TODO: Stefano, PLEASE ADD A TEST CASE DIRECTLY TESTING FOR THE VALUES OF DET_PROB AND REQUIRED_MT_FRAGS
         # WITHOUT COMPARING TO ANOTHER RESULT FROM THE SAME FUNCTION; KIND OF CIRCULAR
 
         pval_th = 1e-4

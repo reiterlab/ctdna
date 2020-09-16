@@ -123,6 +123,7 @@ def compute_pval_th(annual_fpr_th, panel_size, seq_err, seq_eff, dna_conc_gamma_
         cfdna_concs = np.array([
             sp.stats.gamma.ppf(pct, dna_conc_gamma_params['shape'], loc=0, scale=dna_conc_gamma_params['scale'])
             for pct in pcts])
+        # note: every cell contains one hGE (either considering maternal or paternal copy)
         cfdna_hge_per_ml = cfdna_concs / diploid_genome_weight_ng
     else:
         cfdna_hge_per_ml = np.array([wt_hge_per_ml])
@@ -294,19 +295,20 @@ def simulate_pval_th(annual_fpr_th, smp_frq, n_precursors, bn_lesion_size, d_bn,
 
     if cfdna_hge_per_ml is None:
         plasma_dna_concs = get_plasma_dna_concentrations(n_sim_tumors, gamma_params=settings.FIT_GAMMA_PARAMS)
-        # calculate whole genome equivalents per plasma ml
-        cfdna_hge_per_ml = plasma_dna_concs / (diploid_genome_weight_ng / 2)
+        # calculate haploid genome equivalents per plasma ml
+        # note: every cell contains one hGE (either considering maternal or paternal copy)
+        cfdna_hge_per_ml = plasma_dna_concs / diploid_genome_weight_ng
 
     # assuming 5 liters of blood and 55% of plasma
     plasma_ml = settings.BLOOD_AMOUNT * settings.PLASMA_FRACTION * 1000
-    cfdna_hge = plasma_ml * cfdna_hge_per_ml
+    cfdna_genomes = plasma_ml * cfdna_hge_per_ml * 2
     # number of mutant biomarkers shed by benign lesions
     ctdna_hge = np.zeros(n_sim_tumors)
     for _ in range(n_precursors):
         ctdna_hge += poisson.rvs(bn_lesion_size * d_bn * q_d / epsilon, size=n_sim_tumors)
     # sum the random mutant + wildtype biomarker amount from the cancer plus the normal level
     # because only one copy of ctDNA is mutated that one is modeled with q_d
-    n_bms = np.rint(cfdna_hge + ctdna_hge + ctdna_hge).astype(int)
+    n_bms = np.rint(cfdna_genomes + ctdna_hge + ctdna_hge).astype(int)
     # calculate VAFs (variant allele frequencies)
     bm_mt_fractions = ctdna_hge / n_bms
     del ctdna_hge
@@ -391,6 +393,7 @@ def calculate_detection_probability(n_min_det_muts, panel_size, n_muts_cancer, h
     :param required_mt_frags: minimum number of mutated fragments required to call mutation at a given position
     :return: probability that the test will be positive
     """
+    # note: every cell contains one hGE (either considering maternal or paternal copy); hence two genomes
     n_genomes_total = 2 * n_hge_normal + 2 * hge_tumors
     tumor_vaf = hge_tumors / n_genomes_total
     normal_vaf = 1 - tumor_vaf
@@ -543,6 +546,7 @@ def calculate_sensitivity(b, d, q_d, epsilon, n_min_det_muts, panel_size, n_muts
         sp.stats.gamma.ppf(pct, dna_conc_gamma_params['shape'], loc=0, scale=dna_conc_gamma_params['scale'])
         for pct in pcts])
 
+    # note: every cell contains one hGE (either considering maternal or paternal copy)
     cfdna_hge_per_ml = cfdna_concs / settings.DIPLOID_GE_WEIGHT_ng
     cfdna_hge_total = np.rint(cfdna_hge_per_ml * plasma_ml)
     #     logger.info('cfDNA hGEs in bloodstream distribution: '+','.join(f'{hge}' for hge in cfdna_hge_total))

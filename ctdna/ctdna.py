@@ -207,15 +207,15 @@ def main(raw_args=None):
                 df_bms = None
 
             if starting_id <= args.no_subjects:
-                bms_at_det_time = sim_n_pt_subjects(
+                ctdna_hge_dettime = sim_n_pt_subjects(
                     args.no_subjects, b, d, q_d, epsilon, q_b=q_b, lambda_1=args.lambda1,
                     det_size=det_size, sim_time=sim_time, exact_th=args.exact_th,
                     distr_output_fp=dist_fp, starting_id=starting_id)
 
                 if df_bms is not None:
                     # concatenate new results to existing ones
-                    bms_at_det_time = np.concatenate(
-                        (df_bms[Output.col_bm_amount].values, np.array(bms_at_det_time)), axis=0)
+                    ctdna_hge_dettime = np.concatenate(
+                        (df_bms[Output.col_bm_amount].values, np.array(ctdna_hge_dettime)), axis=0)
 
                 # Create random samples of biomarker wildtype molecules (plasma DNA concentrations) per mL in humans
                 # according to the specified gamma distribution
@@ -223,20 +223,20 @@ def main(raw_args=None):
 
                     # sample random plasma cfDNA concentrations to calculate wildtype cfDNA per plasma mL
                     plasma_dna_concs = get_plasma_dna_concentrations(
-                        len(bms_at_det_time), gamma_params=settings.FIT_GAMMA_PARAMS)
+                        len(ctdna_hge_dettime), gamma_params=settings.FIT_GAMMA_PARAMS)
 
                     # calculate wildtype whole genome equivalents per plasma ml
                     wt_hge_per_ml = plasma_dna_concs / settings.DIPLOID_GE_WEIGHT_ng
 
                 else:
                     # number of wildtype genome equivalents is fixed at the given number
-                    wt_hge_per_ml = np.ones(len(bms_at_det_time)) * args.biomarker_wt_freq_ml
+                    wt_hge_per_ml = np.ones(len(ctdna_hge_dettime)) * args.biomarker_wt_freq_ml
 
                 # take liquid biopsies
                 total_bms_vafs, sampled_bms, sampled_bms_vafs = take_liquid_biopsies(
-                    bms_at_det_time, wt_hge_per_ml, tube_size=args.tube_size)
+                    ctdna_hge_dettime, wt_hge_per_ml, tube_size=args.tube_size)
 
-                export_data(dist_fp, bms_at_det_time, sampled_bms, sampled_bms_vafs)
+                export_data(dist_fp, ctdna_hge_dettime, sampled_bms, sampled_bms_vafs)
 
             else:
                 logger.info('Biomarker distribution for the same settings was previously simulated. '

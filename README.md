@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/reiterlab/ctdna.svg?branch=master)](https://travis-ci.com/reiterlab/ctdna)
+
 # ctDNA: Circulating tumor DNA
 
 Python package to compute the shedding of a biomarker from cancer cells into the bloodstream and its analysis in liquid biopsies (small blood samples). 
