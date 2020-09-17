@@ -1,4 +1,5 @@
-[![Build Status](https://travis-ci.com/reiterlab/ctdna.svg?branch=master)](https://travis-ci.com/reiterlab/ctdna)
+![build](https://github.com/reiterlab/ctdna/workflows/build/badge.svg?branch=master)
+[![codecov](https://codecov.io/gh/reiterlab/ctdna/branch/master/graph/badge.svg)](https://codecov.io/gh/reiterlab/ctdna)
 
 # ctDNA: Circulating tumor DNA
 
@@ -16,7 +17,7 @@ See preprint Avanzini et al. (2020) for further technical details: https://doi.o
 1. Easiest is to install Mini anaconda and create a new python environment in a terminal window with ```conda create --name py36 python=3.6``` and activate it with ```conda activate py36```
 2. Clone the repository from GitHub with ```git clone https://github.com/reiterlab/ctdna.git``` 
 3. If you want to have system-wide access, create distribution packages by going into the main folder with ```cd <CTDNA_DIRECTORY>```, run ```python setup.py clean sdist bdist_wheel``` and install ```ctdna``` to your python environment by executing ```pip install -e <CTDNA_DIRECTORY>```
-4. Test installation with ```python -c 'import ctdna'``` and ```python -m unittest discover <CTDNA_DIRECTORY>/tests/```
+4. Test installation with ```python -c 'import ctdna'``` and ```pytest <CTDNA_DIRECTORY>/tests/```
 5. To uninstall the package use ```pip uninstall ctdna``` or ```conda remove ctdna```
 
 
