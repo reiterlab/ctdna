@@ -26,7 +26,6 @@ setup(
       classifiers=[
         'Development Status :: 3 - Alpha',
         'Programming Language :: Python :: 3.6',
-        'Intended Audience :: Scientists',
       ],
       test_suite='tests',
       entry_points={
