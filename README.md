@@ -1,5 +1,6 @@
 ![build](https://github.com/reiterlab/ctdna/workflows/build/badge.svg?branch=master)
 [![codecov](https://codecov.io/gh/reiterlab/ctdna/branch/master/graph/badge.svg)](https://codecov.io/gh/reiterlab/ctdna)
+![PyPI](https://github.com/reiterlab/ctdna/workflows/PyPI/badge.svg)
 
 # ctDNA: Circulating tumor DNA
 
