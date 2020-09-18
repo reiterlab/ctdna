@@ -21,13 +21,12 @@ def get_growth_to_biomarker(b0, d0, shedding_rate, n_bms=None):
     return np.random.exponential(abs(b0 - d0) / shedding_rate, size=n_bms) * np.sign(b0 - d0)
 
 
-def get_time_to_biomarker(sc_sizes, b0, d0, shedding_rate):
+def get_rtime_to_biomarker(sc_sizes, b0, d0, shedding_rate):
     """
     Get exponentially distributed time to the occurrence of 1 or n mutations and the growth of the ancestral subclones
     in that time;
     biomarker is only shed per cell death event
-    :param sc_sizes: size of subclone that generates the new biomarker, if n_bms is not None needs
-                     to be an array of that size
+    :param sc_sizes: size of subclone that generates the new biomarker,
     :param b0: birth rate of the wildtype
     :param d0: death rate of the wildtype
     :param shedding_rate: biomarker shedding rate (sum of shedding per cell death, division, and per time unit)
@@ -39,7 +38,7 @@ def get_time_to_biomarker(sc_sizes, b0, d0, shedding_rate):
     return np.log(max(sc_sizes + growth, 1) / sc_sizes) / (b0 - d0), growth
 
 
-def get_time_to_event_constant_pop(rate, n, n_events=None):
+def get_rtime_to_event_constant_pop(rate, n, n_events=None):
     """
     Get exponentially distributed waiting time to the next n events in a population of fixed finite size
     :param rate: event rate [per time unit]

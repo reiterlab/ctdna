@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from heapq import heappush, heappop
 
-from ctdna.bp_formulas import get_time_to_biomarker, get_growth_fraction_rate, get_time_to_event_constant_pop
+from ctdna.bp_formulas import get_rtime_to_biomarker, get_growth_fraction_rate, get_rtime_to_event_constant_pop
 from ctdna.utils import Output
 import ctdna.settings as settings
 
@@ -308,12 +308,12 @@ class Lesion:
                 self.approx_cells = True
                 logger.debug('Growth of lesion is now deterministic. Size {:.2e}'.format(self.size))
             if self.r != 0:
-                t_shed, gr = get_time_to_biomarker(self.size, self.b, self.d, self.shedding_rate)
+                t_shed, gr = get_rtime_to_biomarker(self.size, self.b, self.d, self.shedding_rate)
                 if t_shed == 0:
                     logger.warning(f'Python may have reached its numerical precision limits! '
                                    + f'size: {self.size:.3e}, shedding rate: {self.shedding_rate:.3e}')
             else:
-                t_shed = get_time_to_event_constant_pop(self.shedding_rate, self.size)
+                t_shed = get_rtime_to_event_constant_pop(self.shedding_rate, self.size)
 
             t_to_next_event = self.age + t_shed
             heappush(self.event_heap, (t_to_next_event, [0], BIOMARKER_SHEDDING))

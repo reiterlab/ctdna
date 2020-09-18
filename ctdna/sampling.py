@@ -399,9 +399,9 @@ def take_liquid_biopsies(ctdna_hge_het, wt_hges_per_ml, tube_size=settings.TUBE_
     logger.info('Sampling {:.3%} of the human plasma with a tube of size {:.1f} ml.'.format(
         sample_fraction, tube_size * 1000))
 
+    ctdna_vafs = np.empty(len(ctdna_hge_het))
     ctdna_hges_sampled = np.empty(len(ctdna_hge_het))
     ctdna_vafs_sampled = np.empty(len(ctdna_hge_het))
-    total_bms_vafs = np.empty(len(ctdna_hge_het))
 
     # calculate the number of haploid genome equivalents in all plasma
     cfdna_hge = wt_hges_per_ml * plasma_ml
@@ -411,9 +411,9 @@ def take_liquid_biopsies(ctdna_hge_het, wt_hges_per_ml, tube_size=settings.TUBE_
     for i, n_ctdna_hge in enumerate(ctdna_hge_het):
         n_genomes = 2*cfdna_hge[i] + 2*n_ctdna_hge  # second copy of shed ctDNA is not mutated
         n_exp_bm_sample = int(n_genomes * sample_fraction)
-        total_bms_vafs[i] = n_ctdna_hge / n_genomes
+        ctdna_vafs[i] = n_ctdna_hge / n_genomes
         # sampling of DNA fragments with a somatic heterozygous mutation
-        ctdna_hges_sampled[i] = np.random.binomial(n_exp_bm_sample, total_bms_vafs[i])
+        ctdna_hges_sampled[i] = np.random.binomial(n_exp_bm_sample, ctdna_vafs[i])
         ctdna_vafs_sampled[i] = ctdna_hges_sampled[i] / n_exp_bm_sample
         # logger.debug(f'Sampled {sampled_bms[i]} mtBM molecules at VAF {ctdna_vafs_sampled[i]:.4%} from overall ctDNA '
         #              + f'concentration of {bm_mt_fraction:.3%} and frequency of {n_ctdna_hge:.3e}.')
@@ -424,4 +424,4 @@ def take_liquid_biopsies(ctdna_hge_het, wt_hges_per_ml, tube_size=settings.TUBE_
     logger.info('At least 2 mutant ctDNA equivalents in sample for {:.3%} ({}/{}) of tumors.'.format(
         n_cancers_2_mt_bms / len(ctdna_hge_het), n_cancers_2_mt_bms, len(ctdna_hge_het)))
 
-    return total_bms_vafs, ctdna_hges_sampled, ctdna_vafs_sampled
+    return ctdna_vafs, ctdna_hges_sampled, ctdna_vafs_sampled
