@@ -15,11 +15,10 @@ See preprint Avanzini et al. (2020) for further technical details: https://doi.o
 
 
 ### <a name="installation"> Installation and Setup
-1. Easiest is to install Mini anaconda and create a new python environment in a terminal window with ```conda create --name py36 python=3.6``` and activate it with ```conda activate py36```
-2. Clone the repository from GitHub with ```git clone https://github.com/reiterlab/ctdna.git``` 
-3. If you want to have system-wide access, create distribution packages by going into the main folder with ```cd <CTDNA_DIRECTORY>```, run ```python setup.py clean sdist bdist_wheel``` and install ```ctdna``` to your python environment by executing ```pip install -e <CTDNA_DIRECTORY>```
-4. Test installation with ```python -c 'import ctdna'``` and ```pytest <CTDNA_DIRECTORY>/tests/```
-5. To uninstall the package use ```pip uninstall ctdna``` or ```conda remove ctdna```
+- Easiest is to install Mini anaconda [https://docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html) and create a new conda environment with ```conda create -n ctdna python=3.6``` and activate it with ```conda activate ctdna```
+- Install the ctdna package with ```pip install ctdna```
+- Test installation with ```python -c 'import ctdna'```
+- Uninstall package and delete conda environment with ```conda deactivate ctdna``` ```conda remove --name ctdna --all```
 
 
 ### <a name="examples"> Manual
