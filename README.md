@@ -19,7 +19,7 @@ See preprint Avanzini et al. (2020) for further technical details: https://doi.o
 - Easiest is to install Mini anaconda [https://docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html) and create a new conda environment with ```conda create -n ctdna python=3.6``` and activate it with ```conda activate ctdna```
 - Install the ctdna package with ```pip install ctdna```
 - Test installation with ```python -c 'import ctdna'```
-- Uninstall package and delete conda environment with ```conda deactivate ctdna``` ```conda remove --name ctdna --all```
+- Uninstall package and delete conda environment with ```conda deactivate ctdna``` and ```conda remove --name ctdna --all```
 
 
 ### <a name="examples"> Manual
