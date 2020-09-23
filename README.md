@@ -4,8 +4,9 @@
 
 # ctDNA: Circulating tumor DNA
 
-Python package to compute the shedding of a biomarker from cancer cells into the bloodstream and its analysis in liquid biopsies (small blood samples). 
+Python package ([https://pypi.org/project/ctdna](https://pypi.org/project/ctdna)) to compute the shedding of a biomarker from cancer cells into the bloodstream and its analysis in liquid biopsies (small blood samples). 
 The package can be run from the command line or various methods can be important for customized calculations. 
+Source code is available at [https://github.com/reiterlab/ctdna](https://github.com/reiterlab/ctdna).
 See examples below.
 See preprint Avanzini et al. (2020) for further technical details: https://doi.org/10.1101/2020.02.12.946228
 
@@ -30,7 +31,7 @@ See preprint Avanzini et al. (2020) for further technical details: https://doi.o
 4. ```roc```: computes the ROC (receiver operating characteristic) 
 
 
-See ```<CTDNA_DIRECTORY>/ctdna/settings.py``` for default parameter values.
+See ```<PACKAGE_DIRECTORY>/settings.py``` for default parameter values.
 
 
 ### <a name="examples"> Examples
