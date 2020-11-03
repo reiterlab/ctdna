@@ -1,6 +1,7 @@
 ![build](https://github.com/reiterlab/ctdna/workflows/build/badge.svg?branch=master)
 [![codecov](https://codecov.io/gh/reiterlab/ctdna/branch/master/graph/badge.svg)](https://codecov.io/gh/reiterlab/ctdna)
 ![PyPI](https://github.com/reiterlab/ctdna/workflows/PyPI/badge.svg)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/reiterlab/ctdna/HEAD?filepath=example.ipynb)
 
 # ctDNA: Circulating tumor DNA
 
@@ -35,8 +36,7 @@ See ```<PACKAGE_DIRECTORY>/settings.py``` for default parameter values.
 
 
 ### <a name="examples"> Examples
-- [example.ipynb](example.ipynb): Calculate the probability to detect a specific actionable mutation in tumors with diameters of 1, 1.2, 1.5, and 2 cm with a specificity of 99%
-
+- Use the interactive binder notebook at https://mybinder.org/v2/gh/reiterlab/ctdna/912b0958ef64d536185fdb2af33c71945db73287 to immediately try the package. Examples show how to calculate the probability to detect a specific actionable mutation in tumors with diameters of 1, 1.2, 1.5, and 2 cm with a specificity of 99% [example.ipynb](example.ipynb) 
 - Simulate tumor growth and ctDNA shedding dynamics of 10 cancers: ```ctdna dynamics -b 0.14 -d 0.13 -M 1e10 -n 10```
 - Simulate ctDNA at a given tumor size for 100 subjects: ```ctdna distribution -b 0.14 -d 0.13 -n 100 -M 1e8 --q_d=1.4e-4```
 - Simulate monthly relapse testing for previously simulated tumor growth and shedding dynamics: ```ctdna detection monthly -b 0.14 -d 0.13 -M 1e10 --panel_size 20 --n_muts 20 --annual_fpr 0.05 --seq_eff 0.5 --imaging_det_size 1e9```
