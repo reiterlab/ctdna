@@ -8,13 +8,15 @@
 
 Python package ([https://pypi.org/project/ctdna](https://pypi.org/project/ctdna)) to compute the shedding of a biomarker from cancer cells into the bloodstream and its analysis in liquid biopsies (small blood samples). 
 The package can be run from the command line or various methods can be important for customized calculations. 
+Multiple examples are provided below and can be executed within a browser from [https://mybinder.org](https://mybinder.org/v2/gh/reiterlab/ctdna/912b0958ef64d536185fdb2af33c71945db73287).
+Cite: Avanzini et al, [A mathematical model of ctDNA shedding predicts tumor detection size](https://doi.org/10.1126/sciadv.abc4308), *Science Advances* 6:eabc4308 (2020), in press.
+For further technical details see the preprint Avanzini et al., bioRxiv (2020): https://doi.org/10.1101/2020.02.12.946228
 Source code is available at [https://github.com/reiterlab/ctdna](https://github.com/reiterlab/ctdna).
-See examples below.
-See preprint Avanzini et al. (2020) for further technical details: https://doi.org/10.1101/2020.02.12.946228
 
 ### <a name="releases"> Releases
 * ctdna 0.1.0 2020-05-06: Initial release of package.
 * ctdna 0.1.1 2020-08-18: Added various examples and unittests. Added methods to calculate detection probabilities.
+* ctdna 0.1.2 2020-11-16: Made example available at [https://mybinder.org](https://mybinder.org/v2/gh/reiterlab/ctdna/912b0958ef64d536185fdb2af33c71945db73287).
 
 
 ### <a name="installation"> Installation and Setup
