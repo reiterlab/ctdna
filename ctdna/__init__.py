@@ -18,4 +18,4 @@ ch.setFormatter(formatter)
 logger.addHandler(fh)
 logger.addHandler(ch)
 # logger.propagate = False
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.WARNING)
