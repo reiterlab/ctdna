@@ -3,6 +3,7 @@
 ![PyPI](https://github.com/reiterlab/ctdna/workflows/PyPI/badge.svg)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/reiterlab/ctdna/HEAD?filepath=example.ipynb)
 [![Downloads](https://pepy.tech/badge/ctdna)](https://pepy.tech/project/ctdna)
+[![Downloads](https://pepy.tech/badge/ctdna/month)](https://pepy.tech/project/ctdna)
 
 # ctDNA: Circulating tumor DNA
 
