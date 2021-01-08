@@ -80,6 +80,15 @@ Fig. S10C: ```ctdna detection annually -b 0.14 -d 0.13 -M 5e11 --panel_size 3000
 
 - ```--biomarker_wt_freq_ml <>``` Optional argument to fix the wildtype haploid genome equivalents (hGE) per plasma ml to the given number instead of sampling the plasma DNA concentration from a Gamma distribution with parameters specified in ```<CTDNA_DIRECTORY>/ctdna/settings.py```
 
+- ```-v <>``` or ```--verbose```: Run the package with a log level of DEBUG to receive more detailed output. 
+The default log level can alternatively also be configured in ```<PACKAGE_REPOSITORY>/ctdna/__init__.py```.
+Log level can also be changed by loading the ctdna package:
+```
+import logging
+logger = logging.getLogger('ctdna')   # get logger
+logger.setLevel(logging.INFO)   # sets log level to INFO
+```
+
 #### Detection mode
 - ```--annual_fpr <>```: Specifies desired annual false positive rate (1 - specificity) if test is repeated at the given frequency over a year
 - ```--pval_th <>```: Instead of the desired annual false positive rate ```--annual_fpr```, one can directly provide a p-value threshold that calls somatic point mutations in ctDNA
